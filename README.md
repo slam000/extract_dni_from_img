@@ -36,4 +36,4 @@ Para usar este script, simplemente ejecute el archivo app.py en su terminal con 
 Las contribuciones a este proyecto son bienvenidas. Si encuentra un error o tiene una sugerencia para una mejora, no dude en abrir un problema o enviar una solicitud de extracción.
 
 ## Licencia
-Este proyecto está licenciado bajo los términos de la licencia MIT.
+Este proyecto está licenciado bajo los términos de la [licencia MIT](LICENSE).
