@@ -1,4 +1,4 @@
-# Documentación del Proyecto de Extracción de Texto de Imágenes y PDFs
+# Extracción de Texto de Imágenes y PDFs
 Este proyecto es un script de Python que se utiliza para extraer texto de imágenes y documentos PDF, y luego buscar números de documentos (DNI, NIE, pasaporte) en el texto extraído.
 
 ## Dependencias
