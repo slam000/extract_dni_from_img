@@ -2,7 +2,6 @@
 # Date: 17/12/2023
 # Description: Extraer el número de documento (DNI, NIE o pasaporte) de una imagen o pdf utilizando OCR.
 
-
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
@@ -14,8 +13,6 @@ from pdf2image import convert_from_path
 import pandas as pd
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
-
-
 
 def ocr(image):
     """
@@ -95,10 +92,7 @@ def extraerTexto(img_color):
     # Invetir la imagen
     invert_image = 255 - opening_image
     # ampliar la imagen
-    invert_image = cv2.resize(invert_image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    # Guardar la imagen ampliada
-    cv2.imwrite('/imagenes/temp_.jpg', invert_image)
-    
+    invert_image = cv2.resize(invert_image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)    
     
     img = img_color
     # Convertir a escala de grises
@@ -107,11 +101,10 @@ def extraerTexto(img_color):
     thresh = cv2.resize(thresh, None, fx=1.25, fy=1.25)
     blur = cv2.GaussianBlur(thresh, (5,5), 0)
     detect_text = pytesseract.image_to_string(blur, lang='spa', config='--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ')
-    print(f'Texto detectado con nuevo método: {detect_text}')
+    # print(f'Texto detectado con nuevo método: {detect_text}')
     
     # Extraer el texto de la imagen
     data_image= pytesseract.image_to_data(invert_image, output_type=Output.DICT)
-    
     texto_completo = ' '.join(data_image['text'])
     # Eliminar los caracteres especiales
     texto_completo = re.sub(r'[^A-Za-z0-9]+', ' ', texto_completo)
