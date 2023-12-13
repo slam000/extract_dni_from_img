@@ -6,6 +6,8 @@ from pytesseract import Output
 import os
 import re
 from pdf2image import convert_from_path
+import pandas as pd
+from azure.storage.blob import BlobServiceClient
 
 def ocr(image):
     """
@@ -139,6 +141,17 @@ def extrae_paths_imagenes(path):
     
     return paths_imagenes
 
+# extraer paths de las imagenes desde el csv
+def extrae_paths_imagenes_csv(path_csv):
+    csv_file = pd.read_csv(path_csv, sep=';')
+    # Extraer de la columna path y container_name
+    path_imagenes = []
+    for index, row in csv_file.iterrows():
+        # añado el path de la imagen y el container_name
+        path_imagenes.append((row['path'], row['container_name']))
+        
+    return path_imagenes    
+
 # identificar el tipo de documento (DNI, NIE, Pasaporte)
 def identificar_documento(texto_completo):
     """
@@ -212,10 +225,11 @@ def main():
     Función principal que procesa las imágenes de prueba.
     """
     paths_imagenes = []
-    paths_imagenes = extrae_paths_imagenes('imagenes_prueba')
+    # paths_imagenes = extrae_paths_imagenes('imagenes_prueba')
+    csv_file = 'tenantNationalIdDocument_pr.csv'
+    paths_imagenes = extrae_paths_imagenes_csv(csv_file)
     
-    print(paths_imagenes)
-    
+    """
     for path in paths_imagenes:
 
         # Cargar la imagen
@@ -236,8 +250,20 @@ def main():
             
         print('-----------------')
         print('-----------------')
-        
-        
+    """ 
+    for path in paths_imagenes:
+        container_name = path[1]
+        blob_name = path[0]
+        blob_service_client = BlobServiceClient(account_url="https://{your_account}.blob.core.windows.net", credential="your_account_key")
+        blob_client = blob_service_client.get_blob_client(container_name, blob_name)
+        # Descarga el blob a un archivo local
+        with open("downloaded_blob.txt", "wb") as download_file:
+            download_file.write(blob_client.download_blob().readall())
+
+    # Extraer los paths de las imagenes
+    # Procesar las imagenes
+    # Subir los resultados a blob storage
+    
         
 if __name__ == '__main__':
     main()
