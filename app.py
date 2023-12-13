@@ -1,3 +1,8 @@
+# Author: Marcelo Sanchez
+# Date: 17/12/2023
+# Description: Extraer el número de documento (DNI, NIE o pasaporte) de una imagen o pdf utilizando OCR.
+
+
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
@@ -9,8 +14,6 @@ from pdf2image import convert_from_path
 import pandas as pd
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
-
-
 
 
 
@@ -308,7 +311,7 @@ def main():
                     print(f'DNI: {dni}')
                     
                     contrato = dame_contrato_id(dni)
-                    
+                                        
                     # Añadir los resultados al diccionario
                     resultados['DNI'].append(dni)
                     resultados['Contrato'].append(contrato)
