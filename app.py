@@ -8,6 +8,11 @@ import re
 from pdf2image import convert_from_path
 import pandas as pd
 from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions import ResourceNotFoundError
+
+
+
+
 
 def ocr(image):
     """
@@ -22,6 +27,31 @@ def ocr(image):
     custom_config = r'-l spa - psm 11'
     text = pytesseract.image_to_string(image,config=custom_config )
     return text
+
+
+# Carga CONTRATOS_DNIS.csv y devuelve el contrato_id en base al dni
+def dame_contrato_id(dni):
+    """
+    Carga CONTRATOS_DNIS.csv y devuelve el contrato_id en base al dni
+
+    Args:
+        dmi (str): DNI, NIE o pasaporte.
+
+    Returns:
+        str: Contrato_id.
+    
+    Example csv file:
+        sociedad;contrato;interl_comercial;dni;contrato_id
+        2000;2300000000000;1000000003;12345678A;2000/2300000000000
+    """
+    # Cargar el archivo csv
+    df = pd.read_csv('check-contract/CONTRATOS_DNIS.csv', sep=';')
+    # Buscar el contrato_id en base al dni, si no lo encuentra devuelve None
+    contrato_id = None
+    if dni in df['dni'].values:
+        contrato_id = df[df['dni'] == dni]['contrato_id'].values[0]
+    return contrato_id
+
 
 def convertir_a_imagen(pdf):
     """
@@ -52,30 +82,40 @@ def extraerTexto(img_color):
 
     Returns:
     str: El texto extraído de la imagen.
-    """
+    """    
     # Transformar a escala de grises
-    img_gris = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
-
+    img_gris = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)  
     # Binarizar la imagen
     thresh_img = cv2.threshold(img_gris, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1,2))
     opening_image = cv2.morphologyEx(thresh_img, cv2.MORPH_OPEN, kernel,iterations=1)
-
-    # Mostrar la imagen
-    #plt.imshow(opening_image, cmap='gray')
-    #plt.show()
-
-
     # Invetir la imagen
     invert_image = 255 - opening_image
     # ampliar la imagen
     invert_image = cv2.resize(invert_image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-
+    # Guardar la imagen ampliada
+    cv2.imwrite('/imagenes/temp_.jpg', invert_image)
+    
+    
+    img = img_color
+    # Convertir a escala de grises
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    thresh = cv2.resize(thresh, None, fx=1.25, fy=1.25)
+    blur = cv2.GaussianBlur(thresh, (5,5), 0)
+    detect_text = pytesseract.image_to_string(blur, lang='spa', config='--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ')
+    print(f'Texto detectado con nuevo método: {detect_text}')
+    
+    # Extraer el texto de la imagen
     data_image= pytesseract.image_to_data(invert_image, output_type=Output.DICT)
-
-
+    
     texto_completo = ' '.join(data_image['text'])
+    # Eliminar los caracteres especiales
+    texto_completo = re.sub(r'[^A-Za-z0-9]+', ' ', texto_completo)
+    
+    # Convertir texto a mayúsculas
+    texto_completo = detect_text.upper()
+        
     return texto_completo
 
 def buscar_dni(texto_completo):
@@ -93,10 +133,14 @@ def buscar_dni(texto_completo):
     DNI encontrado: 12345678A
     '12345678A'
     """
-    dni = re.search(r'\b\d{8}[A-Z]\b', texto_completo)
+    print(f'Texto completo: {texto_completo}')
+    
+    # dni = re.search(r'\b\d{8}[A-Z]\b', texto_completo)
+    dni = re.search(r'\d{8}[A-Za-z]', texto_completo)
     if dni:
         print(f"DNI encontrado: {dni.group()}")
         return dni.group()
+    
     
     else:
         # Expresion regunlar para encontrar el NIE (X, Y, Z + 7 digitos + 1 letra)
@@ -116,7 +160,7 @@ def buscar_dni(texto_completo):
             
             else:
                 print("No se encontró número documento.")
-                return "DNI no encontrado"
+                return 'None'
     
 def extrae_paths_imagenes(path):
     """
@@ -169,9 +213,6 @@ def identificar_documento(texto_completo):
     elif re.search(r'\b[X-Z]\d{7}[A-Z]\b', texto_completo):
         print('NIE')
         return 'NIE'
-    elif re.search(r'\b[A-Z]{3}\d{6}\b', texto_completo):
-        print('Pasaporte')
-        return 'Pasaporte'
     else:
         print('No se encontró número documento')
         return 'No se encontró número documento'
@@ -226,43 +267,108 @@ def main():
     """
     paths_imagenes = []
     # paths_imagenes = extrae_paths_imagenes('imagenes_prueba')
-    csv_file = 'tenantNationalIdDocument_pr.csv'
+    csv_file = 'test.csv'
     paths_imagenes = extrae_paths_imagenes_csv(csv_file)
     
-    """
-    for path in paths_imagenes:
+    # Crear un diccionario para almacenar los resultados de la extracción de DNIs, NIEs, contenedores y paths
+    resultados = {'DNI': [], 'Contrato': [], 'container_name': [], 'path': []}
 
-        # Cargar la imagen
-        img_color = cv2.imread(path)
-        
-        # Identificar frente o dorso
-        fd = identificar_frente_dorso(img_color)
-        
-        if fd == 'Frente':
-            texto_completo = extraerTexto(img_color)
-            dni = buscar_dni(texto_completo)
-            print(dni)
-        else:
-            print('Dorso')
-            texto_completo = extraerTexto(img_color)
-            print(texto_completo)
-            procesar_dorso_dni(texto_completo)
-            
-        print('-----------------')
-        print('-----------------')
-    """ 
     for path in paths_imagenes:
         container_name = path[1]
         blob_name = path[0]
-        blob_service_client = BlobServiceClient(account_url="https://{your_account}.blob.core.windows.net", credential="your_account_key")
+                
+        print(f'Procesando imagen: {blob_name} correspondiente al container: {container_name}')
+        print('-----------------')
+        print('Conectando con blob storage...')
+        
+        blob_service_client = BlobServiceClient(account_url="https://maccstoragerentaldocpro.blob.core.windows.net", credential="xPTRKus+jDQ4d4CatSG4A1k/+kj+q06x5XAUwGYqa0VrYL/ZsSQ6kZCj+SvAlX7DbYORhp5egT/L+ASt3Dk5tw==")
         blob_client = blob_service_client.get_blob_client(container_name, blob_name)
-        # Descarga el blob a un archivo local
-        with open("downloaded_blob.txt", "wb") as download_file:
-            download_file.write(blob_client.download_blob().readall())
+        
+        print('Descargando imagen...')
+        
+        
+        # Descargar la imagen del blob storage al directorio local imagenes
+        try:
+            with open(blob_name, "wb") as my_blob:
+                blob_data = blob_client.download_blob()
+                blob_data.readinto(my_blob)
 
-    # Extraer los paths de las imagenes
-    # Procesar las imagenes
-    # Subir los resultados a blob storage
+            # Cargar la imagen
+            img_color = cv2.imread(blob_name)
+            
+            # Si el path es una imagen jpg, png o jpeg
+            if blob_name.endswith('.jpg') or blob_name.endswith('.png') or blob_name.endswith('.jpeg'):            
+                # Identificar frente o dorso
+                print('Identificando frente o dorso...')
+                
+                fd = identificar_frente_dorso(img_color)
+                if fd == 'Frente':
+                    texto_completo = extraerTexto(img_color)
+                    dni = buscar_dni(texto_completo)
+                    print(f'DNI: {dni}')
+                    
+                    contrato = dame_contrato_id(dni)
+                    
+                    # Añadir los resultados al diccionario
+                    resultados['DNI'].append(dni)
+                    resultados['Contrato'].append(contrato)
+                    resultados['container_name'].append(container_name)
+                    resultados['path'].append(blob_name)
+                    
+                    
+                    print(f'Contrato: {contrato}')
+                    
+                else:
+                    print('Dorso')
+                    texto_completo = extraerTexto(img_color)
+                    # La expresión regular para un DNI es \d{8}[A-Za-z]< 
+                    dni = re.findall(r'\b\d{8}[A-Z]\b', texto_completo)
+                    if dni:
+                        contrato = dame_contrato_id(dni)
+                        # Añadir los resultados al diccionario
+                        resultados['DNI'].append(dni)
+                        resultados['Contrato'].append(contrato)
+                        resultados['container_name'].append(container_name)
+                        resultados['path'].append(blob_name)
+                        
+                        print(f'Texto completo: {f'Texto extraido del dorso de la imagen {texto_completo}. DNI: {dni}'}')
+                    else:
+                        # Añadir los resultados al diccionario
+                        resultados['DNI'].append('dorso')
+                        resultados['Contrato'].append('dorso')
+                        resultados['container_name'].append(container_name)
+                        resultados['path'].append(blob_name)
+                        print('No se encontró número documento.')
+                        
+                print('-----------------')
+                print('-----------------')
+            
+            # Si el path es un pdf
+            elif blob_name.endswith('.pdf'):
+                # Convertir el pdf a imagen
+                print(f'El blob {blob_name} es un pdf.')
+            
+            print(f'eliminando imagen: {blob_name} en entorno local.')
+            # Eliminar la imagen local
+            os.remove(blob_name)
+            
+            print('-----------------')
+            print('-----------------')
+            
+    
+        except ResourceNotFoundError:
+            print(f'No se encontró el blob {blob_name} en el container {container_name}')
+            print('-----------------')
+            print('-----------------')
+            continue
+    
+    # Imprimir los resultados por pantalla y guardarlos en un csv
+    df = pd.DataFrame(resultados)
+    print(df)
+    df.to_csv('resultados.csv', index=False)
+    print('-----------------')
+    
+        
     
         
 if __name__ == '__main__':
